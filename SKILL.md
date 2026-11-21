@@ -1,4 +1,4 @@
-﻿---
+---
 name: paper-layout-polish
 description: '顶会论文版面美化与「不均匀空白」消除（CVPR/ICLR/NeurIPS/ICML/AAAI 等 LaTeX 投稿）。当用户要"美化论文""版面太丑""看起来很空""末行孤零零一个词""图没撑满栏宽""表格两边留白""公式编号掉到下一行""投稿前最后过一遍排版"时使用。流程固定为三段：① 检查并把问题连同证据呈现给用户 → ② 用户审核决定改哪些 → ③ 按审核结果执行修改并复跑验证。Also for: polish paper layout, fix widows and orphans, fill column width, camera-ready formatting check, tune figure/table sizing, LaTeX layout audit.'
 metadata:

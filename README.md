@@ -2,40 +2,40 @@
 
 顶会论文版面美化：把「不均匀空白」量化成可复核的证据，再按你审核的范围去改。
 
-方法来自《提升顶会投稿美感的六大焚决》（Alonzo）：把 PDF 缩到 50%、退后半步看轮廓——好论文每栏的文字与图表应该拼成**边缘锋利、深浅一致的矩形色块**，空白只允许出现在栏间中缝、页边距和段落过渡处。凡破坏这个矩形的空白，就是"不均匀空白"。关键是**消除**而不是减少：剩一处，整体观感就还是脏的。
+方法来自《提升顶会投稿美感的六大焚决》（Alonzo）：把 PDF 缩到 50%、退后半步看轮廓——好论文每栏的文字与图表应该拼成**边缘锋利、深浅一致的矩形色块**，空白只允许出现在栏间中缝、页边距和段落过渡处。凡破坏这个矩形的空白，就是“不均匀空白”。关键是**消除**而不是减少：剩一处，整体观感就还是脏的。
 
 ## 安装
 
-这个仓库本身就是一个技能包（SKILL.md + 
-eferences/ + scripts/），装进 DSH 的用户技能目录即可被自动发现：
+这个仓库本身就是一个技能包（`SKILL.md` + `references/` + `scripts/`），装进 DSH 的用户技能目录即可被自动发现：
 
-`ash
+```bash
 git clone https://github.com/9527La/paper-layout-polish.git ~/.dsh/skills/paper-layout-polish
-`
+```
 
-Windows 下目标目录是 C:\Users\<你>\.dsh\skills\paper-layout-polish。依赖只有 Python 3 + PyMuPDF：
+Windows 下目标目录是 `C:\Users\<你>\.dsh\skills\paper-layout-polish`。依赖只有 Python 3 + PyMuPDF：
 
-`ash
+```bash
 pip install pymupdf
-`
+```
 
 ## 目录结构
 
-`
-SKILL.md                  技能说明（何时用、三段流程、参数与退出码）
-references/rubric.md      六类判据、硬阈值/目标、P0–P3 定义
-references/latex-fixes.md 修法：删词滑块表、tabular*、align、enumitem…
-references/figure-fixes.md 构图与宽高比、matplotlib 片段
+```text
+SKILL.md                    技能说明（何时用、三段流程、参数与退出码）
+references/rubric.md        六类判据、硬阈值/目标、P0–P3 定义
+references/latex-fixes.md   修法：删词滑块表、tabular*、align、enumitem…
+references/figure-fixes.md  构图与宽高比、matplotlib 片段
 references/report-template.md Phase 1/2/3 的报告骨架
-scripts/audit_layout.py   审计脚本（PyMuPDF，输出 Markdown + JSON + 裁剪图）
-examples/demo2/           自测：4 页假论文的前后对照（含 before/after 报告）
-`
+scripts/audit_layout.py     审计脚本（PyMuPDF，输出 Markdown + JSON + 裁剪图）
+examples/demo2/             自测：4 页假论文的前后对照（含 before/after 报告）
+examples/demo3/             自测：列表、多子图、寡行「删掉」三处局部对照
+```
 
 ## 三段流程（不会直接改你的稿子）
 
-1. **检查与呈现** — 定位 `paper.tex` / `paper.pdf`，跑审计脚本，生成带裁剪图的报告；脚本看不到的（legend 遮挡、子图刻度、流程图构图）用人眼补。最后**停下来**，把"需要你决定的"列清楚：全修 / 只修 P0 / 逐条挑 / 先不改。
-2. **用户审核** — 复述 in-scope 与 out-of-scope，确认后再动。说"你看着办"时默认只动 P0+P1。
-3. **执行修改** — 顺序是源码级 → 大对象（图/表/公式）→ 文本级。每改一批必须"改→编译→复跑→比数字"，没改善就回退并标"已尝试/未生效"，最后给 before/after 表。
+1. **检查与呈现** — 定位 `paper.tex` / `paper.pdf`，跑审计脚本，生成带裁剪图的报告；脚本看不到的（legend 遮挡、子图刻度、流程图构图）用人眼补。最后**停下来**，把“需要你决定的”列清楚：全修 / 只修 P0 / 逐条挑 / 先不改。
+2. **用户审核** — 复述 in-scope 与 out-of-scope，确认后再动。说“你看着办”时默认只动 P0+P1。
+3. **执行修改** — 顺序是源码级 → 大对象（图/表/公式）→ 文本级。每改一批必须“改→编译→复跑→比数字”，没改善就回退并标“已尝试/未生效”，最后给 before/after 表。
 
 ## 能自动检出并给出修法的
 
@@ -126,7 +126,7 @@ demo3 的另一个作用：说明**删词会重排整栏**。第一次删完，1
 
 ## 实测：其他语料
 
-- 自带 fixture（2 页双栏，种 6 类缺陷）：P0 11 → 修 4 处后 9，"越界"和"图"两节整节消失。
+- 自带 fixture（2 页双栏，种 6 类缺陷）：P0 11 → 修 4 处后 9，“越界”和“图”两节整节消失。
 - IEEE Trans. Smart Grid 真论文前 4 页：P0 4 / P1 6 / P2 1，越界只剩 3 条真实的 2.2–2.6pt 微溢（版心 254.5pt，识别为 2 栏）。
 - 单栏 letterpaper 文档：正确识别为 1 栏（468.1pt），仍报出 25% 宽的窄表。
 
@@ -144,7 +144,7 @@ python scripts/audit_layout.py --pdf paper.pdf --tex paper.tex \
 
 ## 局限（脚本看不到的）
 
-- legend 是否压住数据点、子图刻度是否对齐、流程图构图是否"像拍照一样占满 70%"——这些要人眼。
+- legend 是否压住数据点、子图刻度是否对齐、流程图构图是否“像拍照一样占满 70%”——这些要人眼。
 - `figure*` / `table*` 以版心为基准判断宽度。
 - 最后一页的空白通常由内容量决定，不算版面缺陷。
 - 端到端只测过 LaTeX；PDF 需由 TeX 正常产出（有 `.tex` 才能做源码级检查）。

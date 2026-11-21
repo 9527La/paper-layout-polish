@@ -57,6 +57,17 @@ def line_of(page, text):
     return out
 
 
+def bullet_left(page, y0, y1):
+    xs = []
+    for blk in page.get_text("dict")["blocks"]:
+        for ln in blk.get("lines", []):
+            t = "".join(sp["text"] for sp in ln["spans"]).strip()
+            r = fitz.Rect(ln["bbox"])
+            if t.startswith("•") and r.y0 >= y0 - 4 and r.y1 <= y1 + 4:
+                xs.append(r.x0)
+    return min(xs) if xs else None
+
+
 def mark(layer, r, origin, off, color, tint, scale, dashed_flag=True, w=6, dash=15, pad=7):
     ax = (r.x0 - origin.x0) * scale + off[0]
     ay = (r.y0 - origin.y0) * scale + off[1]
@@ -138,8 +149,10 @@ def main():
     last_b = b.search_for("mization with frozen encoders")[0]
     first_a = a.search_for("Quadratic attention")[0]
     last_a = a.search_for("Unstable gradients with frozen encoders")[0]
-    lb = fitz.Rect(first_b.x0 - 4, first_b.y0 - 3, 301.0, last_b.y1 + 3)
-    rb = fitz.Rect(first_a.x0 - 4, first_a.y0 - 3, 301.0, last_a.y1 + 3)
+    bl_b = bullet_left(b, first_b.y0, last_b.y1) or first_b.x0 - 12
+    bl_a = bullet_left(a, first_a.y0, last_a.y1) or first_a.x0 - 12
+    lb = fitz.Rect(bl_b - 4, first_b.y0 - 3, 301.0, last_b.y1 + 3)
+    rb = fitz.Rect(bl_a - 4, first_a.y0 - 3, 301.0, last_a.y1 + 3)
     lrect = fitz.Rect(66, lb.y0 - 42, 322, lb.y1 + 16)
     rrect = fitz.Rect(66, rb.y0 - 42, 322, rb.y1 + 18)
     panel(2, "问题 ②：列表 —— 左缩进 11pt，每条都折成两行",

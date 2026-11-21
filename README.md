@@ -66,6 +66,30 @@ examples/demo2/           自测：4 页假论文的前后对照（含 before/af
 | 公式 | 越栏 158%，编号掉到下一行 | 编号回到行内，残留 10.4pt 微溢 |
 | 源码级 | `\subsubsection`×2、`\texttt`×3、默认 itemize | **0** |
 
+逐条局部对照：左栏红虚线框 + 浅红底＝被审计判为问题的地方，右栏绿实线框 + 浅绿底＝修好之后的同一处。
+
+**① 段落末行只占栏宽 33% → 66%**
+
+![段落末行](examples/demo2/cmp-01-widow.png)
+
+**② 表格没有撑满栏宽（151pt / 229pt，两侧各空 39pt）→ `tabular*` 拉满**
+
+![表格宽度](examples/demo2/cmp-02-table.png)
+
+**③ 图只占 68% 栏宽、右侧空 73pt → `width=\linewidth` 顶到栏边**
+
+![图片宽度](examples/demo2/cmp-03-figure.png)
+
+**④ 公式宽 131% 栏宽、越出栏外，编号 (1) 被挤到下一行 → `aligned` 三行，编号回到行内**
+
+![公式越栏](examples/demo2/cmp-04-equation.png)
+
+**⑤ `2.1.1` 三级标题独占一行、上下各留一段白 → 改成行内 `\paragraph{Relaxation.}`**
+
+![三级标题](examples/demo2/cmp-05-heading.png)
+
+整页对照（缩到 50% 看版面轮廓，正是这套判据的观察方式）：
+
 ![before/after](examples/demo2/before-after.png)
 
 值得记的两点：

@@ -448,6 +448,27 @@ def figure_rects(page):
     return rects
 
 
+def subfigure_groups(page):
+    """把同一 y 带上的多张图归为一组（≥2 张视为多子图）。"""
+    imgs = sorted(figure_rects(page), key=lambda r: (r.y0, r.x0))
+    groups, cur = [], []
+    for r in imgs:
+        if not cur:
+            cur = [r]
+            continue
+        union = fitz.Rect(cur[0])
+        for q in cur[1:]:
+            union |= q
+        if r.y0 < union.y1 - 6 and r.y1 > union.y0 + 6:
+            cur.append(r)
+        else:
+            groups.append(cur)
+            cur = [r]
+    if cur:
+        groups.append(cur)
+    return groups
+
+
 def inside(rects, x, y):
     for r in rects:
         if r.x0 - 2 <= x <= r.x1 + 2 and r.y0 - 2 <= y <= r.y1 + 2:
@@ -683,7 +704,7 @@ class Auditor:
                                 col=c.index + 1,
                                 metric=f"末行占比 {fill*100:.1f}%",
                                 detail=detail + tag,
-                                suggest="删词或长短表述替换压回上一行（首选）/ 加半句让末行变长 / {\\looseness=-1} / \\enlargethispage",
+                                suggest="首选删词 / 长短表述替换（in the way of→by 这类），把这条末行整行消掉；其次 {\\looseness=-1}、\\enlargethispage；把它填长只算最后手段",
                                 bbox=(l.x0, l.y0, l.x1, l.y1),
                                 extra={"fill": round(fill, 3), "text": l.text.strip()[:70], "lonely": lonely, "caption": bool(in_cap)},
                             )
@@ -853,7 +874,16 @@ class Auditor:
     def check_figures(self):
         for pno in self.pages:
             page = self.doc[pno]
+            # 多子图交给 check_subfigures 统一判（否则「子图各占 49%」会被逐张报一遍）
+            grouped = set()
+            for g in subfigure_groups(page):
+                if len(g) >= 2:
+                    for q in g:
+                        grouped.add((round(q.x0, 1), round(q.y0, 1), round(q.x1, 1), round(q.y1, 1)))
             for r in figure_rects(page):
+                if (round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)) in grouped:
+                    continue
+
                 full = r.width > self.cols[-1].right - self.cols[0].left + 2
                 ref_w = self.text_width if full else min(c.width for c in self.cols)
                 ratio = r.width / ref_w
@@ -890,6 +920,141 @@ class Auditor:
                             detail="高大于宽，版面里会留下左右两条空白",
                             suggest="重排成横向长条（≥4:3，越长越好），或拆成并排多子图",
                             bbox=(r.x0, r.y0, r.x1, r.y1),
+                        )
+                    )
+
+    # -- 检查 5b：多子图 -------------------------------------------------- #
+
+    def check_subfigures(self):
+        """一图多子图：子图之间的空白、子图上方的空带、子图整体没撑满。
+
+        原文的判据是「图要像一块矩形色块」：子图之间只留一条细缝，上方不留空带。
+        """
+        for pno in self.pages:
+            page = self.doc[pno]
+            for grp in subfigure_groups(page):
+                if len(grp) < 2:
+                    continue
+                rects = sorted(grp, key=lambda r: r.x0)
+                band = fitz.Rect(rects[0])
+                for r in rects[1:]:
+                    band |= r
+                gaps = [round(rects[i + 1].x0 - rects[i].x1, 1) for i in range(len(rects) - 1)]
+                col_idx = 1 if band.x0 < self.split else 2
+                col = self.cols[col_idx - 1]
+                if band.width < 0.9 * col.width:
+                    self.issues.append(
+                        Issue(
+                            cat="figure",
+                            severity="P2",
+                            page=pno + 1,
+                            col=col_idx,
+                            metric=f"{len(rects)} 子图整体占栏宽 {band.width / col.width * 100:.0f}%",
+                            detail="多子图加起来没撑满栏宽，两侧留白不匀",
+                            suggest="每张子图用 width=0.49\\linewidth + 4pt 间距，整体吃掉整栏",
+                            bbox=(band.x0, band.y0, band.x1, band.y1),
+                            extra={"gaps": gaps, "subfigures": len(rects)},
+                        )
+                    )
+                if gaps and (max(gaps) > 12 or max(gaps) - min(gaps) > 6):
+                    self.issues.append(
+                        Issue(
+                            cat="figure",
+                            severity="P2",
+                            page=pno + 1,
+                            col=col_idx,
+                            metric=f"{len(rects)} 子图，间距 {min(gaps):.0f}–{max(gaps):.0f}pt",
+                            detail="子图之间留白过宽或宽窄不一，整块图不再是一块连续的色块",
+                            suggest="子图用同一 \\includegraphics 宽度 + 固定间距（或直接拼成一张长图），间距 ≤ 8pt",
+                            bbox=(band.x0, band.y0, band.x1, band.y1),
+                            extra={"gaps": gaps, "subfigures": len(rects)},
+                        )
+                    )
+                # 子图上方的空带：往上找同一栏的正文行
+                prev_bottom = None
+                for l in self.lines_by_page[pno]:
+                    if l.col != col.index or l.y1 > band.y0 - 1:
+                        continue
+                    if prev_bottom is None or l.y1 > prev_bottom:
+                        prev_bottom = l.y1
+                if prev_bottom is not None and band.y0 - prev_bottom > 2.2 * self.leading:
+                    self.issues.append(
+                        Issue(
+                            cat="figure",
+                            severity="P2",
+                            page=pno + 1,
+                            col=col_idx,
+                            metric=f"子图上空 {band.y0 - prev_bottom:.0f}pt",
+                            detail="多子图整体上方留了一条空带（排版空白 + 图片自带留白）",
+                            suggest="裁掉图片自身的白边（bbox_inches='tight'），并让子图整体贴住上一段正文",
+                            bbox=(band.x0, prev_bottom, band.x1, band.y0),
+                            extra={"subfigures": len(rects)},
+                        )
+                    )
+
+    # -- 检查 5c：列表 ---------------------------------------------------- #
+
+    def check_lists(self):
+        """itemize/enumerate：左侧缩进 + 每个条目末行不满，是最像「凑篇幅」的一类空白。"""
+        markers = ("•", "·", "◦", "‣", "▪", "–", "-")
+        for pno in self.pages:
+            for c in self.cols:
+                seq = sorted([l for l in self.lines_by_page[pno] if l.col == c.index],
+                             key=lambda l: (l.y0, l.x0))
+                bullets = [l for l in seq if l.text.lstrip()[:1] in markers and l.nchars > 1]
+                if len(bullets) < 2:
+                    continue
+                # 同一列表：bullet 起点 x 相同、相邻 bullet 之间纵向连续（间隔离谱就断开）
+                lists, cur = [], [bullets[0]]
+                for b in bullets[1:]:
+                    same_x = abs(b.x0 - cur[0].x0) <= 3.0
+                    gap = b.y0 - cur[-1].y0
+                    if same_x and gap < 25 * self.leading:
+                        cur.append(b)
+                    else:
+                        lists.append(cur)
+                        cur = [b]
+                lists.append(cur)
+
+                for grp in lists:
+                    if len(grp) < 2:
+                        continue
+                    indent = grp[0].x0 - c.left
+                    # 每个条目的末行：bullet 之后、下一个 bullet（或正文新段）之前的最后一个行
+                    fills = []
+                    for k, first in enumerate(grp):
+                        stop = grp[k + 1].y0 - 1 if k + 1 < len(grp) else first.y0 + 12 * self.leading
+                        body = [l for l in seq
+                                if first.y0 - 0.5 <= l.y0 < stop and l.x0 >= first.x0 - 1
+                                and not self.is_heading(l)]
+                        if not body:
+                            continue
+                        last = max(body, key=lambda l: l.y0)
+                        fills.append((last.x1 - c.left) / c.width)
+                    if not fills:
+                        continue
+                    under = sum(1 for f in fills if f < self.args.min_fill - 0.005)
+                    med = sorted(fills)[len(fills) // 2]
+                    if under == 0 and indent <= 8:
+                        continue
+                    sev = "P1" if under else "P2"
+                    detail = (f"列表共 {len(grp)} 项，左边距 {indent:.0f}pt"
+                              f"（正文顶格在 {c.left:.0f}pt）")
+                    if under:
+                        detail += f"；其中 {under} 项的末行不足 {self.args.min_fill*100:.0f}%"
+                    self.issues.append(
+                        Issue(
+                            cat="list",
+                            severity=sev,
+                            page=pno + 1,
+                            col=c.index + 1,
+                            metric=f"末行占比中位 {med*100:.0f}%，左边距 {indent:.0f}pt",
+                            detail=detail,
+                            suggest=("\\usepackage{enumitem} + \\setlist[itemize]{leftmargin=*,itemsep=1pt} 去左缩进；"
+                                     "每条缩短到末行 ≥50%（删词优先，不要加字），条目少时直接改 \\paragraph 或并成一段"),
+                            bbox=(grp[0].x0, grp[0].y0, c.right, max(l.y1 for l in grp)),
+                            extra={"items": len(grp), "under_min": under,
+                                   "fills": [round(f, 3) for f in fills], "indent": round(indent, 1)},
                         )
                     )
 
@@ -1048,7 +1213,8 @@ class Auditor:
                     continue
                 if "enumitem" in s or "itemsep" in s or "\\setlist" in s:
                     compact += 1
-            if compact == 0:
+            # 版面层已经报过列表问题就不再重复（同一条 itemize 不报两遍）
+            if compact == 0 and not any(i.cat == "list" for i in self.issues):
                 self.issues.append(
                     Issue(
                         cat="source",
@@ -1068,6 +1234,8 @@ class Auditor:
         self.check_overflow()
         self.check_bottom()
         self.check_figures()
+        self.check_subfigures()
+        self.check_lists()
         self.check_tables()
         if tex_root:
             self.check_source(Path(tex_root))
@@ -1121,6 +1289,7 @@ def to_markdown(aud: Auditor, issues, pdf_path) -> str:
         "overflow": "越界与公式编号",
         "bottom": "栏底空白",
         "figure": "图",
+        "list": "列表（itemize/enumerate）",
         "table": "表",
         "source": "源码级",
     }

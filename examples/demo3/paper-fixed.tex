@@ -1,0 +1,71 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{times}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=1pt,parsep=0pt}
+\pagestyle{empty}
+\setlength{\parindent}{12pt}
+
+\begin{document}
+
+\twocolumn[{%
+\begin{center}
+{\Large\bfseries Two Lists, Two Charts, One Paragraph}\\[2pt]
+{\small A demo for list indentation, multi-subfigure spacing and widow removal}
+\end{center}\vspace{6pt}}]
+
+\section{Introduction}
+
+Standard latent diffusion models compress high-resolution RGB frames into compact spatial
+representations before denoising, and a trajectory-consistent sampler then aligns the
+velocity field with the rectified flow used during training. In our implementation the
+sampler reuses the cached text embedding, so the extra cost is one forward pass per step
+rather than a full re-encode of every frame and prompt pair. The remaining bottlenecks are well understood; each was measured on a single GPU with
+the same batch and seed as the baseline. Three issues matter for long video.
+
+\begin{itemize}
+\item Quadratic attention memory across long videos.
+\item Redundant patches blur fine local details.
+\item Unstable gradients with frozen encoders.
+\end{itemize}
+
+\section{Method}
+
+\subsection{Sampling}
+\noindent Choosing the map is an integer problem, and we relax it in the usual way: the
+binary variable that says whether shard $s$ is placed in region $r$ becomes a fraction,
+the constraint that every shard sits in at least three regions becomes a lower bound on
+the sum, and the objective becomes linear in the relaxed variables. The relaxation is
+tight in practice because the objective is dominated by a linear latency term, and the
+rounded solution differs from the relaxed one on fewer than two percent of the shards.
+Both rules are enforced inside the solver, never as post-hoc filters.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{fig_l.png}\hspace*{4pt}\includegraphics[width=0.49\linewidth]{fig_r.png}
+\caption{Quantitative comparison of sampling quality and inference speed across
+varying token budgets.}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Per-region p99 read latency.}
+\begin{tabular}{lcc}
+\hline
+Region & Baseline & Ours \\
+\hline
+us-east & 71.4 & 51.0 \\
+eu-west & 88.9 & 57.3 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Results}
+
+In Figure 1 the trajectory-aligned sampler achieves lower FID across all step budgets
+while maintaining near-linear latency scaling up to sixteen thousand tokens on a single GPU.
+
+\end{document}

@@ -1,0 +1,76 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{times}
+\usepackage{amsmath}
+\pagestyle{empty}
+\setlength{\parindent}{12pt}
+
+\begin{document}
+
+\twocolumn[{%
+\begin{center}
+{\Large\bfseries Two Lists, Two Charts, One Paragraph}\\[2pt]
+{\small A demo for list indentation, multi-subfigure spacing and widow removal}
+\end{center}\vspace{6pt}}]
+
+\section{Introduction}
+
+Standard latent diffusion models compress high-resolution RGB frames into compact spatial
+representations before denoising, and a trajectory-consistent sampler then aligns the
+velocity field with the rectified flow used during training. In our implementation the
+sampler reuses the cached text embedding, so the extra cost is one forward pass per step
+rather than a full re-encode of every frame and prompt pair. The remaining bottlenecks
+are well understood and we list them explicitly, because each of them was measured on a
+single GPU with the same batch size and the same random seed as the baseline, which makes
+the comparison fair. This is why we believe the following three issues are the ones that
+matter for long video.
+
+\begin{itemize}
+\item Quadratic attention matrix memory overhead across long video sequence lengths.
+\item Redundant background patch representations degrade fine-grained local details.
+\item Unstable gradient norms during end-to-end optimization with frozen encoders.
+\end{itemize}
+
+\section{Method}
+
+\subsection{Sampling}
+\noindent Choosing the map is an integer problem, and we relax it in the usual way: the
+binary variable that says whether shard $s$ is placed in region $r$ becomes a fraction,
+the constraint that every shard sits in at least three regions becomes a lower bound on
+the sum, and the objective becomes linear in the relaxed variables. The relaxation is
+tight in practice because the objective is dominated by a linear latency term, and the
+rounded solution differs from the relaxed one on fewer than two percent of the shards.
+Both rules are implemented as constraints in the solver rather than as post-hoc filters,
+because a post-hoc filter can produce a map that is infeasible with respect to the
+quorum constraint.
+
+\begin{figure}[t]
+\vspace*{18pt}
+\centering
+\includegraphics[width=0.42\linewidth]{fig_l.png}\hspace*{26pt}\includegraphics[width=0.42\linewidth]{fig_r.png}
+\caption{Quantitative comparison of sampling quality and inference speed across
+varying token budgets.}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Per-region p99 read latency.}
+\begin{tabular}{lcc}
+\hline
+Region & Baseline & Ours \\
+\hline
+us-east & 71.4 & 51.0 \\
+eu-west & 88.9 & 57.3 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Results}
+
+As shown in Figure 1, the trajectory-aligned sampler achieves lower FID across all step
+budgets while maintaining near-linear latency scaling up to sixteen thousand tokens on a
+single GPU.
+
+\end{document}

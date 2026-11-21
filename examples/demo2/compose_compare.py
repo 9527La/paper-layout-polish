@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """知乎风格局部对比图：每行一对裁剪，红虚线=修复前的问题，绿虚线=修复后。"""
 import fitz
 from PIL import Image, ImageDraw, ImageFont
@@ -145,7 +145,7 @@ def main():
     box2 = fitz.Rect(a0, r2.y0 - 2, r2.x1 + 2, r2.y1 + 2)
     ra = fitz.Rect(a0, r2.y0 - 52, a1, r2.y1 + 10)
     ia, ua = crop(adoc[1], ra)
-    rows.append(("① 段落末行（寡妇行）", ib, ub, [box1], ia, ua, [box2],
+    rows.append(("① 段落末行（寡行）", ib, ub, [box1], ia, ua, [box2],
                  "末行只占栏宽 33%", "末行撑到 66%"))
 
     # ② 表宽：Table 1（before 用 151pt 窄表，after 用整宽 tabular*）

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """知乎风格局部对比图：每行一对裁剪，红虚线=修复前的问题，绿虚线=修复后。"""
 import fitz
 from PIL import Image, ImageDraw, ImageFont
@@ -61,10 +61,42 @@ def block_of(page, text):
             return r
     return h
 
-def crop(page, rect, pad=2):
-    r = fitz.Rect(rect.x0 - pad, rect.y0 - pad, rect.x1 + pad, rect.y1 + pad)
+def crop(page, rect, pad=2, pady=None):
+    py = pad if pady is None else pady
+    r = fitz.Rect(rect.x0 - pad, rect.y0 - py, rect.x1 + pad, rect.y1 + py)
     pix = page.get_pixmap(matrix=fitz.Matrix(ZOOM, ZOOM), clip=r)
     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples), r
+
+
+def rows_of(page):
+    """页面上的文本行矩形（用于把裁剪边对齐到整行）。"""
+    out = []
+    for b in page.get_text("dict")["blocks"]:
+        for l in b.get("lines", []):
+            r = fitz.Rect(l["bbox"])
+            if r.height > 1 and r.width > 20:
+                out.append(r)
+    return out
+
+
+def snap(page, rect):
+    """把裁剪边扩到整行：上下各取相邻完整行，不留半截字。"""
+    rs = [r for r in rows_of(page)
+          if r.x1 > rect.x0 + 1 and r.x0 < rect.x1 - 1]
+    top, bot = rect.y0, rect.y1
+    inside = [r for r in rs if r.y0 <= rect.y0 <= r.y1]
+    if inside:
+        top = min(r.y0 for r in inside)
+    else:
+        up = [r.y0 for r in rs if r.y0 < rect.y0]
+        top = max(up) if up else rect.y0
+    inside = [r for r in rs if r.y0 <= rect.y1 <= r.y1]
+    if inside:
+        bot = max(r.y1 for r in inside)
+    else:
+        down = [r.y1 for r in rs if r.y1 > rect.y1]
+        bot = min(down) if down else rect.y1
+    return fitz.Rect(rect.x0, top, rect.x1, bot)
 
 
 def mark(layer, r, origin, off, color, tint, scale, dashed_flag=True, w=3, dash=9):
@@ -138,13 +170,13 @@ def main():
     r1 = hit(bdoc, 1, "quorum constraint.")
     b0, b1 = col_of(r1.x0)
     box1 = fitz.Rect(b0, r1.y0 - 2, r1.x1 + 2, r1.y1 + 2)
-    rb = fitz.Rect(b0, r1.y0 - 52, b1, r1.y1 + 10)
-    ib, ub = crop(bdoc[1], rb)
+    rb = snap(bdoc[1], fitz.Rect(b0, r1.y0 - 52, b1, r1.y1 + 10))
+    ib, ub = crop(bdoc[1], rb, pady=0)
     r2 = hit(adoc, 1, "quorum constraint.")
     a0, a1 = col_of(r2.x0)
     box2 = fitz.Rect(a0, r2.y0 - 2, r2.x1 + 2, r2.y1 + 2)
-    ra = fitz.Rect(a0, r2.y0 - 52, a1, r2.y1 + 10)
-    ia, ua = crop(adoc[1], ra)
+    ra = snap(adoc[1], fitz.Rect(a0, r2.y0 - 52, a1, r2.y1 + 10))
+    ia, ua = crop(adoc[1], ra, pady=0)
     rows.append(("① 段落末行（寡行）", ib, ub, [box1], ia, ua, [box2],
                  "末行只占栏宽 33%", "末行撑到 66%"))
 
@@ -168,7 +200,7 @@ def main():
     ta = tbl(adoc, 2, ca)
     ra = fitz.Rect(LEFT[0] - 8, ca.y0 - 6, LEFT[1] + 6, ta.y1 + 26)
     ia, ua = crop(adoc[2], ra)
-    rows.append(("② 表格没撑满栏宽", ib, ub, [tb], ia, ua, [ta],
+    rows.append(("③ 表格没撑满栏宽", ib, ub, [tb], ia, ua, [ta],
                  f"表宽 {tb.width:.0f}pt / 栏宽 229pt（{tb.width / 229 * 100:.0f}%），两侧各空 {(229 - tb.width) / 2:.0f}pt",
                  f"tabular* 拉满 {ta.width:.0f}pt（= 版心宽）"))
 
@@ -183,7 +215,7 @@ def main():
     ib, ub = crop(bdoc[1], rb)
     ra = fitz.Rect(RIGHT[0] - 4, y0, RIGHT[1] + 4, y1)
     ia, ua = crop(adoc[1], ra)
-    rows.append(("③ 图片两侧留白", ib, ub,
+    rows.append(("④ 图片两侧留白", ib, ub,
                  [fb_rect, fitz.Rect(fb_rect.x1, fb_rect.y0, RIGHT[1], fb_rect.y1)],
                  ia, ua, [fa_rect],
                  "图宽 156pt（68%），右侧空 73pt", "width=\\linewidth 顶到栏边"))
@@ -204,33 +236,33 @@ def main():
     obx = same_line_extent(bdoc[1], mb)
     obx.x1 = min(obx.x1, LEFT[1] + 74)
     eqline = fitz.Rect(obx.x0 - 2, obx.y0 - 2, obx.x1 + 2, obx.y1 + 2)
-    rb = fitz.Rect(LEFT[0] - 6, mb.y0 - 22, LEFT[1] + 74, eqb.y1 + 10)
-    ib, ub = crop(bdoc[1], rb)
+    rb = snap(bdoc[1], fitz.Rect(LEFT[0] - 6, mb.y0 - 26, 308.0, eqb.y1 + 10))
+    ib, ub = crop(bdoc[1], rb, pady=0)
     ma = eq_anchor(adoc[1])
     oa = hit(adoc, 1, "(1)")
     blk = fitz.Rect(62, ma.y0 - 6, LEFT[1] + 10, oa.y1 + 2)
-    ra = fitz.Rect(56, ma.y0 - 16, LEFT[1] + 6, oa.y1 + 44)
-    ia, ua = crop(adoc[1], ra)
-    rows.append(("④ 公式越栏、编号掉行", ib, ub, [eqline, fitz.Rect(eqb.x0 - 2, eqb.y0, eqb.x1 + 2, eqb.y1)],
+    ra = snap(adoc[1], fitz.Rect(56, ma.y0 - 16, LEFT[1] + 6, oa.y1 + 44))
+    ia, ua = crop(adoc[1], ra, pady=0)
+    rows.append(("⑤ 公式越栏、编号掉行", ib, ub, [eqline, fitz.Rect(eqb.x0 - 2, eqb.y0, eqb.x1 + 2, eqb.y1)],
                  ia, ua, [blk],
                  f"公式宽 {obx.width:.0f}pt = {obx.width / 229 * 100:.0f}% 栏宽，右侧溢出 {obx.x1 - LEFT[1]:.0f}pt，编号 (1) 被挤到下一行",
                  "aligned 三行，编号回到行内"))
 
     # ⑤ 章节层级：2.1.1 → 行内 paragraph
     hb = hit(bdoc, 1, "2.1.1")
-    rb = fitz.Rect(LEFT[0], hb.y0 - 22, LEFT[1], hb.y1 + 40)
-    ib, ub = crop(bdoc[1], rb)
+    rb = snap(bdoc[1], fitz.Rect(LEFT[0], hb.y0 - 22, LEFT[1], hb.y1 + 40))
+    ib, ub = crop(bdoc[1], rb, pady=0)
     ha = hit(adoc, 1, "Relaxation.")
-    ra = fitz.Rect(LEFT[0], ha.y0 - 22, LEFT[1], ha.y1 + 34)
-    ia, ua = crop(adoc[1], ra)
-    rows.append(("⑤ 三级标题把正文切碎", ib, ub,
+    ra = snap(adoc[1], fitz.Rect(LEFT[0], ha.y0 - 22, LEFT[1], ha.y1 + 34))
+    ia, ua = crop(adoc[1], ra, pady=0)
+    rows.append(("⑥ 三级标题把正文切碎", ib, ub,
                  [fitz.Rect(LEFT[0], hb.y0 - 6, LEFT[0] + 150, hb.y1 + 2)],
                  ia, ua, [fitz.Rect(LEFT[0], ha.y0 - 4, LEFT[0] + 82, ha.y1 + 1)],
                  "2.1.1 Relaxation 独占一行＋上下空行", "Relaxation. 变成行内小标题"))
 
     f_t = ImageFont.truetype(FONT_B, 30)
     f_s = ImageFont.truetype(FONT_R, 21)
-    names = ["01-widow", "02-table", "03-figure", "04-equation", "05-heading"]
+    names = ["01-widow", "03-table", "04-figure", "05-equation", "06-heading"]
 
     for name, (title, ib, ub, bb, ia, ua, ba, lb, la) in zip(names, rows):
         sb, sa = ib, ia

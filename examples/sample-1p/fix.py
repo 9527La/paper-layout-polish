@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""demo3：before → after。修法原则：寡行靠「删」把末行整行消掉，不靠加字填满。"""
+"""1 页样本：before → after。寡行靠「删」把末行整行消掉，不靠加字填满。"""
 import io
 
 src = io.open("paper.tex", encoding="utf-8").read()

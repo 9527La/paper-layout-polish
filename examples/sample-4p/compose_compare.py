@@ -124,7 +124,7 @@ def mark(layer, r, origin, off, color, tint, scale, dashed_flag=True, w=3, dash=
 
 
 def main():
-    bdoc, adoc = fitz.open("paper.pdf"), fitz.open("paper-final.pdf")
+    bdoc, adoc = fitz.open("paper.pdf"), fitz.open("paper-fixed.pdf")
 
     def hit(doc, page, text, nth=-1):
         r = doc[page].search_for(text)

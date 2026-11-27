@@ -23,10 +23,34 @@ def font(size, bold=False):
     return ImageFont.truetype(FONT_B if bold else FONT_R, size)
 
 
-def crop(page, rect, pad=2):
-    r = fitz.Rect(rect.x0 - pad, rect.y0 - pad, rect.x1 + pad, rect.y1 + pad) & page.rect
+def crop(page, rect, pad=2, pady=None):
+    py = pad if pady is None else pady
+    r = fitz.Rect(rect.x0 - pad, rect.y0 - py, rect.x1 + pad, rect.y1 + py) & page.rect
     pix = page.get_pixmap(matrix=fitz.Matrix(ZOOM, ZOOM), clip=r)
     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples), r
+
+
+def rows_of(page):
+    out = []
+    for blk in page.get_text("dict")["blocks"]:
+        for ln in blk.get("lines", []):
+            r = fitz.Rect(ln["bbox"])
+            if r.height > 1 and r.width > 20:
+                out.append(r)
+    return out
+
+
+def snap(page, rect):
+    """把裁剪边扩到整行，只算与裁剪框横向相交的文本行，避免露出半截字。"""
+    rs = [r for r in rows_of(page) if r.x1 > rect.x0 + 1 and r.x0 < rect.x1 - 1]
+    top, bot = rect.y0, rect.y1
+    inside = [r for r in rs if r.y0 <= rect.y0 <= r.y1]
+    top = min(r.y0 for r in inside) if inside else max(
+        [r.y0 for r in rs if r.y0 < rect.y0] or [rect.y0])
+    inside = [r for r in rs if r.y0 <= rect.y1 <= r.y1]
+    bot = max(r.y1 for r in inside) if inside else min(
+        [r.y1 for r in rs if r.y1 > rect.y1] or [rect.y1])
+    return fitz.Rect(rect.x0, top, rect.x1, bot)
 
 
 def search(page, text):
@@ -92,12 +116,12 @@ def mark(layer, r, origin, off, color, tint, scale, dashed_flag=True, w=6, dash=
         layer.rectangle([x0, y0, x1, y1], outline=color, width=w)
 
 
-def panel(idx, title, note, left, right, lb, rb, out):
+def panel(left, right, lb, rb, out):
     (limg, lrect), lbox = left, lb
     (rimg, rrect), rbox = right, rb
-    gap, head, foot = 24, 92, 58
+    gap, head, foot = 24, 44, 12
     W = limg.width + rimg.width + gap + 28
-    H = head + max(limg.height, rimg.height) + foot + 16
+    H = head + max(limg.height, rimg.height) + foot
     canvas = Image.new("RGB", (W, H), (255, 255, 255))
     off_l = (14, head)
     off_r = (14 + limg.width + gap, head)
@@ -117,13 +141,11 @@ def panel(idx, title, note, left, right, lb, rb, out):
     canvas = Image.alpha_composite(base, lay).convert("RGB")
 
     d = ImageDraw.Draw(canvas)
-    d.text((14, 12), title, font=font(30, True), fill=(25, 25, 30))
     for off, img in ((off_l, limg), (off_r, rimg)):
         d.rectangle([off[0] - 1, off[1] - 1, off[0] + img.width, off[1] + img.height],
                     outline=(160, 160, 168), width=3)
         d.text((off[0], off[1] - 26), "修改前" if off == off_l else "修改后",
                font=font(20, True), fill=(90, 90, 96))
-    d.text((14, head + max(limg.height, rimg.height) + 18), note, font=font(24), fill=(70, 70, 78))
     canvas.save(os.path.join(HERE, out))
     print("wrote", out, canvas.size)
 
@@ -138,11 +160,9 @@ def main():
     tail = min((i for i in jb["issues"] if i["category"] == "widow"), key=lambda i: i["extra"]["fill"])
     lbox = [fitz.Rect(tail["bbox"])]
     rbox = [line_of(a, "post-hoc filters")]
-    lrect = fitz.Rect(60, lbox[0].y0 - 48, 312, lbox[0].y1 + 14)
-    rrect = fitz.Rect(60, rbox[0].y0 - 48, 312, rbox[0].y1 + 14)
-    panel(1, "问题 ①：寡行 —— 末行只剩一个词，整行白掉",
-          "修法：删词（把从句压掉），让这一行消失 —— 末行占比 12% → 95%，不是加字填长",
-          crop(b, lrect), crop(a, rrect), lbox, rbox, "cmp-06-widow.png")
+    lrect = snap(b, fitz.Rect(60, lbox[0].y0 - 48, 312, lbox[0].y1 + 14))
+    rrect = snap(a, fitz.Rect(60, rbox[0].y0 - 48, 312, rbox[0].y1 + 14))
+    panel(crop(b, lrect, pady=0), crop(a, rrect, pady=0), lbox, rbox, "cmp-02-widow-delete.png")
 
     # ② 列表：左边距 + 条目末行不满
     first_b = b.search_for("Quadratic attention")[0]
@@ -153,11 +173,9 @@ def main():
     bl_a = bullet_left(a, first_a.y0, last_a.y1) or first_a.x0 - 12
     lb = fitz.Rect(bl_b - 4, first_b.y0 - 3, 301.0, last_b.y1 + 3)
     rb = fitz.Rect(bl_a - 4, first_a.y0 - 3, 301.0, last_a.y1 + 3)
-    lrect = fitz.Rect(66, lb.y0 - 42, 322, lb.y1 + 16)
-    rrect = fitz.Rect(66, rb.y0 - 42, 322, rb.y1 + 18)
-    panel(2, "问题 ②：列表 —— 左缩进 11pt，每条都折成两行",
-          "修法：enumitem 去左缩进，并把三条压成单行（删词，不加字）",
-          crop(b, lrect), crop(a, rrect), [lb], [rb], "cmp-07-list.png")
+    lrect = snap(b, fitz.Rect(66, lb.y0 - 42, 322, lb.y1 + 16))
+    rrect = snap(a, fitz.Rect(66, rb.y0 - 42, 322, rb.y1 + 18))
+    panel(crop(b, lrect, pady=0), crop(a, rrect, pady=0), [lb], [rb], "cmp-07-list.png")
 
     # ③ 多子图：子图间距 26pt + 上方空带 34pt
     imgs_b = [fitz.Rect(i["bbox"]) for i in b.get_image_info()]
@@ -168,13 +186,14 @@ def main():
     band_a = fitz.Rect(imgs_a[0])
     for r in imgs_a[1:]:
         band_a |= r
-    lrect = fitz.Rect(302, band_b.y0 - 34, 545, band_b.y1 + 44)
-    rrect = fitz.Rect(band_a.x0 - 8, band_a.y0 - 6, band_a.x1 + 8, band_a.y1 + 40)
+    lrect = snap(b, fitz.Rect(302, band_b.y0 - 34, 545, band_b.y1 + 44))
+    rrect = snap(a, fitz.Rect(band_a.x0 - 8, band_a.y0 - 6, band_a.x1 + 8, band_a.y1 + 40))
     gapbox = fitz.Rect(imgs_b[0].x1, band_b.y0, imgs_b[1].x0, band_b.y1)
-    topbox = fitz.Rect(band_b.x0, band_b.y0 - 30, band_b.x1, band_b.y0 - 2)
-    panel(3, "问题 ③：多子图 —— 子图间距 26pt、上方空带 34pt",
-          "修法：width=0.49\\linewidth + 4pt 间距，去掉 \\vspace，图整体贴住正文",
-          crop(b, lrect), crop(a, rrect), [gapbox, topbox], [band_a], "cmp-08-subfig.png")
+    above = [r for r in rows_of(b) if r.y1 <= band_b.y0 and r.x1 > band_b.x0 and r.x0 < band_b.x1]
+    text_bot = max(r.y1 for r in above) if above else band_b.y0 - 30
+    topbox = fitz.Rect(band_b.x0, text_bot + 1, band_b.x1, band_b.y0 - 1)
+    panel(crop(b, lrect, pady=0), crop(a, rrect, pady=0), [gapbox, topbox], [band_a],
+          "cmp-08-subfig.png")
 
 
 if __name__ == "__main__":

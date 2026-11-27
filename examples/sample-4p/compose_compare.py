@@ -260,19 +260,17 @@ def main():
                  ia, ua, [fitz.Rect(LEFT[0], ha.y0 - 4, LEFT[0] + 82, ha.y1 + 1)],
                  "2.1.1 Relaxation 独占一行＋上下空行", "Relaxation. 变成行内小标题"))
 
-    f_t = ImageFont.truetype(FONT_B, 30)
     f_s = ImageFont.truetype(FONT_R, 21)
     names = ["01-widow", "03-table", "04-figure", "05-equation", "06-heading"]
 
-    for name, (title, ib, ub, bb, ia, ua, ba, lb, la) in zip(names, rows):
+    for name, (_, ib, ub, bb, ia, ua, ba, _, _) in zip(names, rows):
         sb, sa = ib, ia
         w = max(sb.width, sa.width)
-        img = Image.new("RGB", (PAD * 2 + w * 2 + GAP, 84 + max(sb.height, sa.height) + 78), "white")
+        top = 34
+        img = Image.new("RGB", (PAD * 2 + w * 2 + GAP, top + max(sb.height, sa.height) + PAD), "white")
         d = ImageDraw.Draw(img)
-        d.text((PAD, 10), title, font=f_t, fill="black")
-        d.text((PAD, 54), "BEFORE", font=f_s, fill="#b03030")
-        d.text((PAD + w + GAP, 54), "AFTER", font=f_s, fill="#1f7a3a")
-        top = 84
+        d.text((PAD, 6), "BEFORE", font=f_s, fill="#b03030")
+        d.text((PAD + w + GAP, 6), "AFTER", font=f_s, fill="#1f7a3a")
         img.paste(sb, (PAD, top))
         img.paste(sa, (PAD + w + GAP, top))
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -283,10 +281,6 @@ def main():
             mark(ld, r, ua, (PAD + w + GAP, top), (30, 122, 58), (205, 240, 215, 120),
                  ZOOM, dashed_flag=False)
         img = Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
-        d = ImageDraw.Draw(img)
-        cy = top + max(sb.height, sa.height) + 16
-        d.text((PAD, cy), lb, font=f_s, fill="#b03030")
-        d.text((PAD + w + GAP, cy), la, font=f_s, fill="#1f7a3a")
         img.save(f"cmp-{name}.png")
         print("saved", f"cmp-{name}.png", img.size)
 
